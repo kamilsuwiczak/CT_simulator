@@ -5,7 +5,7 @@ import streamlit as st
 from PIL import Image
 
 from .dicom_io import save_dicom, load_dicom
-from .reconstruction import calculate_rmse, simulate_tomograph
+from .reconstruction import analyze_rmse_statistics, calculate_rmse, simulate_tomograph
 
 
 @st.cache_data(show_spinner=False)
@@ -37,9 +37,8 @@ def main():
         if uploaded_file.name.lower().endswith(".dcm"):
             image_array, patient_name, comment, study_date = load_dicom(uploaded_file)
             st.sidebar.info(f"DICOM Info:\n\nPacjent: {patient_name}\n\nData: {study_date}\n\nKomentarz: {comment}")
-            
+
             # Skalowanie w dół dla optymalizacji, podobnie jak w przypadku innych obrazów
-            from PIL import Image
             image = Image.fromarray(np.uint8(image_array * 255.0))
             max_size = 200
             image.thumbnail((max_size, max_size))
@@ -72,6 +71,57 @@ def main():
                 st.success(f"Blad sredniokwadratowy (RMSE): {rmse_value:.4f}")
 
             st.session_state["reconstructed"] = reconstructed
+
+        if st.sidebar.button("Wykonaj analize statystyczna RMSE"):
+            with st.spinner("Trwa analiza statystyczna..."):
+                stats = analyze_rmse_statistics(image_array, n_scans, n_detectors, fan_angle_deg)
+
+            st.divider()
+            st.subheader("Analiza statystyczna RMSE")
+
+            st.markdown("**1) Zmiana RMSE w kolejnych iteracjach odwrotnej transformaty Radona**")
+            st.line_chart(np.array(stats["rmse_per_iteration"]))
+            st.caption(f"Liczba iteracji: {len(stats['rmse_per_iteration'])}")
+
+            st.markdown("**2) Zmiana RMSE przy zwiekszaniu dokladnosci probkowania**")
+            col_a, col_b, col_c = st.columns(3)
+
+            with col_a:
+                st.caption("Wplyw liczby skanow")
+                st.line_chart(np.array(stats["sampling"]["n_scans"]["rmse"]))
+                st.write(
+                    {
+                        "Liczba skanow": stats["sampling"]["n_scans"]["values"],
+                        "RMSE": [round(v, 5) for v in stats["sampling"]["n_scans"]["rmse"]],
+                    }
+                )
+
+            with col_b:
+                st.caption("Wplyw liczby detektorow")
+                st.line_chart(np.array(stats["sampling"]["n_detectors"]["rmse"]))
+                st.write(
+                    {
+                        "Liczba detektorow": stats["sampling"]["n_detectors"]["values"],
+                        "RMSE": [round(v, 5) for v in stats["sampling"]["n_detectors"]["rmse"]],
+                    }
+                )
+
+            with col_c:
+                st.caption("Wplyw kata wachlarza")
+                st.line_chart(np.array(stats["sampling"]["fan_angle_deg"]["rmse"]))
+                st.write(
+                    {
+                        "Kat wachlarza": stats["sampling"]["fan_angle_deg"]["values"],
+                        "RMSE": [round(v, 5) for v in stats["sampling"]["fan_angle_deg"]["rmse"]],
+                    }
+                )
+
+            st.markdown("**3) Zmiana RMSE po wlaczeniu filtrowania**")
+            col_nf, col_f = st.columns(2)
+            with col_nf:
+                st.metric("RMSE bez filtrowania", f"{stats['filter_comparison']['without_filter']:.5f}")
+            with col_f:
+                st.metric("RMSE z filtrowaniem", f"{stats['filter_comparison']['with_filter']:.5f}")
 
     if "reconstructed" in st.session_state:
         st.divider()
