@@ -36,7 +36,16 @@ def calculate_rmse(image1, image2):
     return np.sqrt(np.mean((image1 - image2) ** 2))
 
 
-def simulate_tomograph(image_array, n_scans, n_detectors, fan_angle_deg, use_filter=False, progress_bar=None):
+def normalize_array(array):
+    array_np = np.asarray(array, dtype=float)
+    min_value = float(np.min(array_np))
+    max_value = float(np.max(array_np))
+    if max_value == min_value:
+        return np.zeros_like(array_np, dtype=float)
+    return (array_np - min_value) / (max_value - min_value)
+
+
+def radon_transform(image_array, n_scans, n_detectors, fan_angle_deg, progress_bar=None):
     height, width = image_array.shape
     center_x, center_y = width // 2, height // 2
     radius = math.sqrt(center_x ** 2 + center_y ** 2)
@@ -52,18 +61,34 @@ def simulate_tomograph(image_array, n_scans, n_detectors, fan_angle_deg, use_fil
             x0, y0 = emitters[i]
             x1, y1 = detectors[i]
             points = bresenham(x0, y0, x1, y1, width, height)
-            ray_sum = sum(image_array[y, x] for x, y in points)
-            sinogram[scan, i] = ray_sum / len(points) if points else 0
+            if points:
+                coordinates = np.asarray(points, dtype=np.int32)
+                xs = coordinates[:, 0]
+                ys = coordinates[:, 1]
+                sinogram[scan, i] = float(np.mean(image_array[ys, xs]))
+            else:
+                sinogram[scan, i] = 0.0
 
         if progress_bar:
             progress_bar.progress((scan + 1) / (2 * n_scans), text="Generowanie sinogramu...")
+
+    return sinogram
+
+
+def simulate_tomograph(image_array, n_scans, n_detectors, fan_angle_deg, use_filter=False, progress_bar=None):
+    height, width = image_array.shape
+    center_x, center_y = width // 2, height // 2
+    radius = math.sqrt(center_x ** 2 + center_y ** 2)
+    fan_angle = math.radians(fan_angle_deg)
+
+    sinogram = radon_transform(image_array, n_scans, n_detectors, fan_angle_deg, progress_bar)
 
     display_sinogram = sinogram.copy()
 
     if use_filter:
         sinogram = apply_filter(sinogram)
 
-    sinogram = np.interp(sinogram, (sinogram.min(), sinogram.max()), (0, 1))
+    sinogram = normalize_array(sinogram)
 
     reconstructed = np.zeros((height, width))
     weight_matrix = np.zeros((height, width))
@@ -86,7 +111,7 @@ def simulate_tomograph(image_array, n_scans, n_detectors, fan_angle_deg, use_fil
             progress_bar.progress(0.5 + (scan + 1) / (2 * n_scans), text="Rekonstrukcja obrazu...")
 
     np.divide(reconstructed, weight_matrix, out=reconstructed, where=weight_matrix != 0)
-    reconstructed = np.interp(reconstructed, (reconstructed.min(), reconstructed.max()), (0, 1))
+    reconstructed = normalize_array(reconstructed)
 
     return display_sinogram, reconstructed
 
