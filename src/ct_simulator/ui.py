@@ -4,7 +4,7 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
-from .dicom_io import save_dicom
+from .dicom_io import save_dicom, load_dicom
 from .reconstruction import calculate_rmse, simulate_tomograph
 
 
@@ -31,13 +31,24 @@ def main():
     fan_angle_deg = st.sidebar.slider("Rozpietosc wachlarza (stopnie)", 45, 360, 180, step=45)
     use_filter = st.sidebar.checkbox("Uzyj filtrowania sinogramu (Splot / Ram-Lak)")
 
-    uploaded_file = st.sidebar.file_uploader("Wgraj obraz wejsciowy", type=["png", "jpg", "jpeg", "bmp"])
+    uploaded_file = st.sidebar.file_uploader("Wgraj obraz wejsciowy", type=["png", "jpg", "jpeg", "bmp", "dcm"])
 
     if uploaded_file is not None:
-        image = Image.open(uploaded_file).convert("L")
-        max_size = 200
-        image.thumbnail((max_size, max_size))
-        image_array = np.array(image) / 255.0
+        if uploaded_file.name.lower().endswith(".dcm"):
+            image_array, patient_name, comment, study_date = load_dicom(uploaded_file)
+            st.sidebar.info(f"DICOM Info:\n\nPacjent: {patient_name}\n\nData: {study_date}\n\nKomentarz: {comment}")
+            
+            # Skalowanie w dół dla optymalizacji, podobnie jak w przypadku innych obrazów
+            from PIL import Image
+            image = Image.fromarray(np.uint8(image_array * 255.0))
+            max_size = 200
+            image.thumbnail((max_size, max_size))
+            image_array = np.array(image) / 255.0
+        else:
+            image = Image.open(uploaded_file).convert("L")
+            max_size = 200
+            image.thumbnail((max_size, max_size))
+            image_array = np.array(image) / 255.0
 
         col1, col2, col3 = st.columns(3)
         with col1:

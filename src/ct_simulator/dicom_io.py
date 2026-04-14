@@ -35,3 +35,26 @@ def save_dicom(image_array, patient_name, comment, date_str):
     dicom_io.seek(0)
     return dicom_io
 
+
+def load_dicom(file_path):
+    ds = pydicom.dcmread(file_path)
+    
+    # Extract metadata safely
+    patient_name = str(ds.PatientName) if 'PatientName' in ds else "Unknown"
+    study_date = ds.StudyDate if 'StudyDate' in ds else "Unknown"
+    comment = ds.ImageComments if 'ImageComments' in ds else ""
+    
+    # Process image data
+    image_array = ds.pixel_array.astype(np.float64)
+    
+    # Normalize back to 0-1 range based on how it was stored
+    if ds.BitsAllocated == 16:
+        image_array = image_array / 65535.0
+    else:
+        # Fallback normalization just in case
+        max_val = np.max(image_array)
+        if max_val > 0:
+            image_array = image_array / max_val
+            
+    return image_array, patient_name, comment, study_date
+
