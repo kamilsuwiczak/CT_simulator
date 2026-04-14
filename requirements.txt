@@ -1,0 +1,6 @@
+numpy
+streamlit
+pillow
+pydicom
+numba
+

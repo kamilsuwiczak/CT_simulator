@@ -51,7 +51,7 @@ def main():
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.image(image_array, caption="Obraz oryginalny", use_container_width=True, clamp=True)
+            st.image(image_array, caption="Obraz oryginalny", width="stretch", clamp=True)
 
         if st.sidebar.button("Uruchom symulacje", type="primary"):
             progress_bar = st.progress(0)
@@ -64,10 +64,10 @@ def main():
 
             with col2:
                 sinogram_display = np.interp(sinogram, (sinogram.min(), sinogram.max()), (0, 1))
-                st.image(sinogram_display, caption="Sinogram", use_container_width=True, clamp=True)
+                st.image(sinogram_display, caption="Sinogram", width="stretch", clamp=True)
 
             with col3:
-                st.image(reconstructed, caption="Obraz wyjsciowy (Rekonstrukcja)", use_container_width=True, clamp=True)
+                st.image(reconstructed, caption="Obraz wyjsciowy (Rekonstrukcja)", width="stretch", clamp=True)
                 st.success(f"Blad sredniokwadratowy (RMSE): {rmse_value:.4f}")
 
             st.session_state["reconstructed"] = reconstructed
