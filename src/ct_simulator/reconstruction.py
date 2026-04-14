@@ -21,7 +21,7 @@ else:
     NUMBA_AVAILABLE = True
 
 
-@njit(cache=True)
+@njit
 def generate_filter(size):
     kernel = np.zeros(size)
     center = size // 2
@@ -49,12 +49,14 @@ def apply_filter(sinogram):
     return filtered
 
 
-@njit(cache=True)
+@njit
 def _normalize_01_numba(image):
-    min_val = image.flat[0]
-    max_val = image.flat[0]
+    flat = image.ravel()
+    min_val = flat[0]
+    max_val = flat[0]
 
-    for value in image.flat:
+    for i in range(flat.size):
+        value = flat[i]
         if value < min_val:
             min_val = value
         elif value > max_val:
@@ -65,11 +67,13 @@ def _normalize_01_numba(image):
         return normalized
 
     scale = 1.0 / (max_val - min_val)
-    for index, value in np.ndenumerate(image):
-        normalized[index] = (value - min_val) * scale
+    normalized_flat = normalized.ravel()
+    for i in range(flat.size):
+        normalized_flat[i] = (flat[i] - min_val) * scale
     return normalized
 
 
+@njit
 def calculate_rmse(image1, image2):
     return np.sqrt(np.mean((image1 - image2) ** 2))
 
@@ -82,7 +86,7 @@ def normalize_array(image):
     return _normalize_01(image)
 
 
-@njit(cache=True)
+@njit
 def _ray_mean_numba(image_array, x0, y0, x1, y1, width, height):
     dx = abs(x1 - x0)
     dy = abs(y1 - y0)
@@ -212,7 +216,7 @@ def simulate_tomograph(
     return display_sinogram, reconstructed
 
 
-@njit(cache=True)
+@njit
 def _backproject_ray_numba(reconstructed, weight_matrix, value, x0, y0, x1, y1, width, height):
     dx = abs(x1 - x0)
     dy = abs(y1 - y0)
