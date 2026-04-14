@@ -44,15 +44,11 @@ def _normalize_01(image):
     return np.interp(image, (min_val, max_val), (0, 1))
 
 
-def simulate_tomograph(
-    image_array,
-    n_scans,
-    n_detectors,
-    fan_angle_deg,
-    use_filter=False,
-    progress_bar=None,
-    collect_rmse_per_iteration=False,
-):
+def normalize_array(image):
+    return _normalize_01(image)
+
+
+def radon_transform(image_array, n_scans, n_detectors, fan_angle_deg, progress_bar=None):
     height, width = image_array.shape
     center_x, center_y = width // 2, height // 2
     radius = math.sqrt(center_x ** 2 + center_y ** 2)
@@ -82,7 +78,15 @@ def simulate_tomograph(
     return sinogram
 
 
-def simulate_tomograph(image_array, n_scans, n_detectors, fan_angle_deg, use_filter=False, progress_bar=None):
+def simulate_tomograph(
+    image_array,
+    n_scans,
+    n_detectors,
+    fan_angle_deg,
+    use_filter=False,
+    progress_bar=None,
+    collect_rmse_per_iteration=False,
+):
     height, width = image_array.shape
     center_x, center_y = width // 2, height // 2
     radius = math.sqrt(center_x ** 2 + center_y ** 2)
