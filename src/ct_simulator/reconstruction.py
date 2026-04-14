@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 
-from .geometry import get_positions
+from .geometry import _bresenham_numba, _get_positions_numba
 
 try:
     from numba import njit
@@ -88,55 +88,17 @@ def normalize_array(image):
 
 @njit
 def _ray_mean_numba(image_array, x0, y0, x1, y1, width, height):
-    dx = abs(x1 - x0)
-    dy = abs(y1 - y0)
-    x = x0
-    y = y0
-    sx = 1 if x0 < x1 else -1
-    sy = 1 if y0 < y1 else -1
+    points = _bresenham_numba(x0, y0, x1, y1, width, height)
     total = 0.0
-    count = 0
-
-    if dx > dy:
-        err = dx / 2.0
-        while x != x1:
-            if 0 <= x < width and 0 <= y < height:
-                total += image_array[y, x]
-                count += 1
-            err -= dy
-            if err < 0:
-                y += sy
-                err += dx
-            x += sx
-    else:
-        err = dy / 2.0
-        while y != y1:
-            if 0 <= x < width and 0 <= y < height:
-                total += image_array[y, x]
-                count += 1
-            err -= dx
-            if err < 0:
-                x += sx
-                err += dy
-            y += sy
-
-    if 0 <= x < width and 0 <= y < height:
-        total += image_array[y, x]
-        count += 1
+    count = points.shape[0]
 
     if count == 0:
         return 0.0
+
+    for i in range(count):
+        total += image_array[points[i, 1], points[i, 0]]
+
     return total / count
-
-
-def _ray_mean(image_array, points):
-    if not points:
-        return 0.0
-
-    coordinates = np.asarray(points, dtype=np.intp)
-    xs = coordinates[:, 0]
-    ys = coordinates[:, 1]
-    return float(image_array[ys, xs].mean())
 
 
 def radon_transform(image_array, n_scans, n_detectors, fan_angle_deg, progress_bar=None):
@@ -149,7 +111,7 @@ def radon_transform(image_array, n_scans, n_detectors, fan_angle_deg, progress_b
 
     for scan in range(n_scans):
         alpha = scan * (math.pi / n_scans)
-        emitters, detectors = get_positions(radius, alpha, fan_angle, n_detectors, center_x, center_y)
+        emitters, detectors = _get_positions_numba(radius, alpha, fan_angle, n_detectors, center_x, center_y)
 
         for i in range(n_detectors):
             x0, y0 = emitters[i]
@@ -191,7 +153,7 @@ def simulate_tomograph(
 
     for scan in range(n_scans):
         alpha = scan * (math.pi / n_scans)
-        emitters, detectors = get_positions(radius, alpha, fan_angle, n_detectors, center_x, center_y)
+        emitters, detectors = _get_positions_numba(radius, alpha, fan_angle, n_detectors, center_x, center_y)
 
         for i in range(n_detectors):
             x0, y0 = emitters[i]
@@ -218,37 +180,10 @@ def simulate_tomograph(
 
 @njit
 def _backproject_ray_numba(reconstructed, weight_matrix, value, x0, y0, x1, y1, width, height):
-    dx = abs(x1 - x0)
-    dy = abs(y1 - y0)
-    x = x0
-    y = y0
-    sx = 1 if x0 < x1 else -1
-    sy = 1 if y0 < y1 else -1
-
-    if dx > dy:
-        err = dx / 2.0
-        while x != x1:
-            if 0 <= x < width and 0 <= y < height:
-                reconstructed[y, x] += value
-                weight_matrix[y, x] += 1
-            err -= dy
-            if err < 0:
-                y += sy
-                err += dx
-            x += sx
-    else:
-        err = dy / 2.0
-        while y != y1:
-            if 0 <= x < width and 0 <= y < height:
-                reconstructed[y, x] += value
-                weight_matrix[y, x] += 1
-            err -= dx
-            if err < 0:
-                x += sx
-                err += dy
-            y += sy
-
-    if 0 <= x < width and 0 <= y < height:
+    points = _bresenham_numba(x0, y0, x1, y1, width, height)
+    for i in range(points.shape[0]):
+        x = points[i, 0]
+        y = points[i, 1]
         reconstructed[y, x] += value
         weight_matrix[y, x] += 1
 
