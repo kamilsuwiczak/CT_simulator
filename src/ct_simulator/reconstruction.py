@@ -1,24 +1,10 @@
 import math
-
 import numpy as np
+from numba import njit
 
 from .geometry import _bresenham_numba, _get_positions_numba
 
-try:
-    from numba import njit
-except ImportError:
-    NUMBA_AVAILABLE = False
-
-    def njit(*args, **kwargs):
-        if args and callable(args[0]) and len(args) == 1 and not kwargs:
-            return args[0]
-
-        def decorator(func):
-            return func
-
-        return decorator
-else:
-    NUMBA_AVAILABLE = True
+NUMBA_AVAILABLE = True
 
 
 @njit
@@ -26,12 +12,13 @@ def generate_filter(size):
     kernel = np.zeros(size)
     center = size // 2
     for i in range(size):
-        if i == center:
+        k = i - center
+        if k == 0:
             kernel[i] = 1.0
-        elif (i - center) % 2 == 0:
+        elif k % 2 == 0:
             kernel[i] = 0.0
         else:
-            kernel[i] = -1.0 / (math.pi ** 2 * (i - center) ** 2)
+            kernel[i] = -4.0 / (np.pi ** 2 * k ** 2)
     return kernel
 
 
@@ -44,9 +31,28 @@ def apply_filter(sinogram):
         row = sinogram[i, :]
         conv_full = np.convolve(row, kernel, mode="full")
         center_start = (len(conv_full) - len(row)) // 2
-        filtered[i, :] = conv_full[center_start : center_start + len(row)]
+        filtered[i, :] = conv_full[center_start: center_start + len(row)]
 
     return filtered
+
+
+# 3. ODPORNA NORMALIZACJA (dla obrazu zrekonstruowanego)
+def normalize_robust(image):
+    """
+    Normalizacja ignorująca ekstremalne wartości (artefakty filtra),
+    które psują kontrast i zawyżają błąd RMSE.
+    """
+    img_flat = image.flatten()
+
+    p_low = np.percentile(img_flat, 2)
+    p_high = np.percentile(img_flat, 98)
+
+    clipped = np.clip(image, p_low, p_high)
+
+    if p_high == p_low:
+        return np.zeros_like(clipped)
+
+    return (clipped - p_low) / (p_high - p_low)
 
 
 @njit
@@ -125,13 +131,13 @@ def radon_transform(image_array, n_scans, n_detectors, fan_angle_deg, progress_b
 
 
 def simulate_tomograph(
-    image_array,
-    n_scans,
-    n_detectors,
-    fan_angle_deg,
-    use_filter=False,
-    progress_bar=None,
-    collect_rmse_per_iteration=False,
+        image_array,
+        n_scans,
+        n_detectors,
+        fan_angle_deg,
+        use_filter=False,
+        progress_bar=None,
+        collect_rmse_per_iteration=False,
 ):
     height, width = image_array.shape
     center_x, center_y = width // 2, height // 2
@@ -164,14 +170,16 @@ def simulate_tomograph(
         if collect_rmse_per_iteration:
             current = np.zeros_like(reconstructed)
             np.divide(reconstructed, weight_matrix, out=current, where=weight_matrix != 0)
-            current = _normalize_01(current)
+
+            current = normalize_robust(current)
             rmse_per_iteration.append(calculate_rmse(image_array, current))
 
         if progress_bar:
             progress_bar.progress(0.5 + (scan + 1) / (2 * n_scans), text="Rekonstrukcja obrazu...")
 
     np.divide(reconstructed, weight_matrix, out=reconstructed, where=weight_matrix != 0)
-    reconstructed = _normalize_01(reconstructed)
+
+    reconstructed = normalize_robust(reconstructed)
 
     if collect_rmse_per_iteration:
         return display_sinogram, reconstructed, rmse_per_iteration
@@ -243,4 +251,3 @@ def analyze_rmse_statistics(image_array, n_scans, n_detectors, fan_angle_deg):
             "with_filter": calculate_rmse(image_array, reconstructed_with_filter),
         },
     }
-
