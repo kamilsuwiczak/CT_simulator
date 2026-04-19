@@ -3,4 +3,6 @@ streamlit
 pillow
 pydicom
 numba
+pandas
+altair
 
