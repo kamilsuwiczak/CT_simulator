@@ -1,8 +1,10 @@
 import datetime
 
 import numpy as np
+import pandas as pd
 import streamlit as st
 from PIL import Image
+import altair as alt
 
 from .dicom_io import save_dicom, load_dicom
 from .reconstruction import analyze_rmse_statistics, calculate_rmse, simulate_tomograph
@@ -29,7 +31,7 @@ def main():
     n_detectors = st.sidebar.slider("Liczba detektorow (n)", 10, 720, 180, step=10)
     n_scans = st.sidebar.slider("Liczba skanow (iteracji)", 10, 720, 180, step=10)
     fan_angle_deg = st.sidebar.slider("Rozpietosc wachlarza (stopnie)", 45, 360, 180, step=45)
-    use_filter = st.sidebar.checkbox("Uzyj filtrowania sinogramu (Splot / Ram-Lak)")
+    use_filter = st.sidebar.checkbox("Uzyj filtrowania sinogramu")
 
     uploaded_file = st.sidebar.file_uploader("Wgraj obraz wejsciowy", type=["png", "jpg", "jpeg", "bmp", "dcm"])
 
@@ -38,7 +40,6 @@ def main():
             image_array, patient_name, comment, study_date = load_dicom(uploaded_file)
             st.sidebar.info(f"DICOM Info:\n\nPacjent: {patient_name}\n\nData: {study_date}\n\nKomentarz: {comment}")
 
-            # Skalowanie w dół dla optymalizacji, podobnie jak w przypadku innych obrazów
             image = Image.fromarray(np.uint8(image_array * 255.0))
             max_size = 200
             image.thumbnail((max_size, max_size))
@@ -88,7 +89,17 @@ def main():
 
             with col_a:
                 st.caption("Wplyw liczby skanow")
-                st.line_chart(np.array(stats["sampling"]["n_scans"]["rmse"]))
+                df_scans = pd.DataFrame({
+                    "Liczba skanow": stats["sampling"]["n_scans"]["values"],
+                    "RMSE": stats["sampling"]["n_scans"]["rmse"]
+                })
+                chart_scans = alt.Chart(df_scans).mark_line(point=True).encode(
+                    x=alt.X("Liczba skanow", title="Liczba skanów"),
+                    y=alt.Y("RMSE", title="RMSE"),
+                    tooltip=["Liczba skanow", "RMSE"]
+                )
+                st.altair_chart(chart_scans, use_container_width=True)
+                
                 st.write(
                     {
                         "Liczba skanow": stats["sampling"]["n_scans"]["values"],
@@ -98,7 +109,17 @@ def main():
 
             with col_b:
                 st.caption("Wplyw liczby detektorow")
-                st.line_chart(np.array(stats["sampling"]["n_detectors"]["rmse"]))
+                df_detectors = pd.DataFrame({
+                    "Liczba detektorow": stats["sampling"]["n_detectors"]["values"],
+                    "RMSE": stats["sampling"]["n_detectors"]["rmse"]
+                })
+                chart_detectors = alt.Chart(df_detectors).mark_line(point=True).encode(
+                    x=alt.X("Liczba detektorow", title="Liczba detektorów"),
+                    y=alt.Y("RMSE", title="RMSE"),
+                    tooltip=["Liczba detektorow", "RMSE"]
+                )
+                st.altair_chart(chart_detectors, use_container_width=True)
+                
                 st.write(
                     {
                         "Liczba detektorow": stats["sampling"]["n_detectors"]["values"],
@@ -108,7 +129,17 @@ def main():
 
             with col_c:
                 st.caption("Wplyw kata wachlarza")
-                st.line_chart(np.array(stats["sampling"]["fan_angle_deg"]["rmse"]))
+                df_fan = pd.DataFrame({
+                    "Kat wachlarza": stats["sampling"]["fan_angle_deg"]["values"],
+                    "RMSE": stats["sampling"]["fan_angle_deg"]["rmse"]
+                })
+                chart_fan = alt.Chart(df_fan).mark_line(point=True).encode(
+                    x=alt.X("Kat wachlarza", title="Kąt wachlarza (stopnie)"),
+                    y=alt.Y("RMSE", title="RMSE"),
+                    tooltip=["Kat wachlarza", "RMSE"]
+                )
+                st.altair_chart(chart_fan, use_container_width=True)
+                
                 st.write(
                     {
                         "Kat wachlarza": stats["sampling"]["fan_angle_deg"]["values"],

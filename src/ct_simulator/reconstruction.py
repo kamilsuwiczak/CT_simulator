@@ -36,12 +36,7 @@ def apply_filter(sinogram):
     return filtered
 
 
-# 3. ODPORNA NORMALIZACJA (dla obrazu zrekonstruowanego)
 def normalize_robust(image):
-    """
-    Normalizacja ignorująca ekstremalne wartości (artefakty filtra),
-    które psują kontrast i zawyżają błąd RMSE.
-    """
     img_flat = image.flatten()
 
     p_low = np.percentile(img_flat, 2)
@@ -197,46 +192,49 @@ def _backproject_ray_numba(reconstructed, weight_matrix, value, x0, y0, x1, y1, 
 
 
 def analyze_rmse_statistics(image_array, n_scans, n_detectors, fan_angle_deg):
+    default_scans = 180
+    default_detectors = 180
+    default_fan = 180
+
     _, _, rmse_per_iteration = simulate_tomograph(
         image_array,
-        n_scans,
-        n_detectors,
-        fan_angle_deg,
-        use_filter=False,
+        default_scans,
+        default_detectors,
+        default_fan,
+        use_filter=True, 
         progress_bar=None,
         collect_rmse_per_iteration=True,
     )
 
-    n_scans_levels = sorted({max(10, n_scans // 2), n_scans, min(720, int(n_scans * 1.5))})
-    n_detectors_levels = sorted({max(10, n_detectors // 2), n_detectors, min(720, int(n_detectors * 1.5))})
-    fan_angle_levels = sorted({max(45, fan_angle_deg // 2), fan_angle_deg, min(360, int(fan_angle_deg * 1.5))})
-
-    rmse_vs_scans = []
-    for scans in n_scans_levels:
-        _, reconstructed = simulate_tomograph(
-            image_array, scans, n_detectors, fan_angle_deg, use_filter=False, progress_bar=None
-        )
-        rmse_vs_scans.append(calculate_rmse(image_array, reconstructed))
-
+    n_detectors_levels = list(range(90, 721, 90))
     rmse_vs_detectors = []
     for detectors in n_detectors_levels:
         _, reconstructed = simulate_tomograph(
-            image_array, n_scans, detectors, fan_angle_deg, use_filter=False, progress_bar=None
+            image_array, default_scans, detectors, default_fan, use_filter=True, progress_bar=None
         )
         rmse_vs_detectors.append(calculate_rmse(image_array, reconstructed))
 
+    n_scans_levels = list(range(90, 721, 90))
+    rmse_vs_scans = []
+    for scans in n_scans_levels:
+        _, reconstructed = simulate_tomograph(
+            image_array, scans, default_detectors, default_fan, use_filter=True, progress_bar=None
+        )
+        rmse_vs_scans.append(calculate_rmse(image_array, reconstructed))
+
+    fan_angle_levels = list(range(45, 271, 45))
     rmse_vs_fan_angle = []
     for fan in fan_angle_levels:
         _, reconstructed = simulate_tomograph(
-            image_array, n_scans, n_detectors, fan, use_filter=False, progress_bar=None
+            image_array, default_scans, default_detectors, fan, use_filter=True, progress_bar=None
         )
         rmse_vs_fan_angle.append(calculate_rmse(image_array, reconstructed))
 
     _, reconstructed_no_filter = simulate_tomograph(
-        image_array, n_scans, n_detectors, fan_angle_deg, use_filter=False, progress_bar=None
+        image_array, default_scans, default_detectors, default_fan, use_filter=False, progress_bar=None
     )
     _, reconstructed_with_filter = simulate_tomograph(
-        image_array, n_scans, n_detectors, fan_angle_deg, use_filter=True, progress_bar=None
+        image_array, default_scans, default_detectors, default_fan, use_filter=True, progress_bar=None
     )
 
     return {
@@ -250,4 +248,4 @@ def analyze_rmse_statistics(image_array, n_scans, n_detectors, fan_angle_deg):
             "without_filter": calculate_rmse(image_array, reconstructed_no_filter),
             "with_filter": calculate_rmse(image_array, reconstructed_with_filter),
         },
-    }
+    }   
